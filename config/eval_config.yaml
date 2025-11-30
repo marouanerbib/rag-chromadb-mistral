@@ -1,0 +1,29 @@
+# Configuration pour l'évaluation du système RAG
+evaluation:
+  # Chemin vers le fichier de données de test
+  test_data_path: "data/evaluation/test_set.json"
+  
+  # Paramètres d'évaluation
+  metrics:
+    # Métriques de récupération
+    retrieval:
+      k: 5  # Nombre de documents à considérer pour l'évaluation
+    
+    # Métriques de génération
+    generation:
+      use_bleu: true
+      use_rouge: true
+      use_bertscore: false  # Nécessite l'installation de bert-score
+  
+  # Seuils pour les métriques
+  thresholds:
+    precision: 0.5
+    recall: 0.5
+    f1_score: 0.5
+  
+  # Options de sortie
+  output:
+    save_results: true
+    output_dir: "results/evaluation"
+    output_file: "evaluation_results.json"
+    verbose: true

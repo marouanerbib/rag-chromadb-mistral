@@ -1,0 +1,452 @@
+"""
+Module implémentant un système RAG (Retrieval-Augmented Generation) qui combine
+des capacités de recherche vectorielle avec un modèle de langage pour fournir
+des réponses basées sur des documents.
+"""
+
+import os
+import json
+import yaml
+import torch
+from typing import Optional, List, Dict, Any, Union
+from pathlib import Path
+import logging
+from ctransformers import AutoModelForCausalLM, AutoConfig
+
+from langchain.schema import Document
+from langchain.prompts import PromptTemplate
+
+from .document_indexer import DocumentIndexer
+from .vector_store import VectorStoreManager
+from .document_processor import DocumentProcessor
+from .utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+# Créer le dossier logs s'il n'existe pas
+log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'logs')
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, 'rag_system.log')
+
+# Configurer le logger
+logger.setLevel(logging.INFO)
+
+# Formatter pour les logs
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# Handler pour le fichier avec rotation (10 Mo max, 5 fichiers de backup)
+file_handler = logging.handlers.RotatingFileHandler(
+    log_file,
+    maxBytes=10*1024*1024,  # 10 MB
+    backupCount=5,
+    encoding='utf-8'
+)
+file_handler.setFormatter(formatter)
+
+# Handler pour la console
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(formatter)
+
+# Supprimer les handlers existants
+logger.handlers = []
+
+# Ajouter les handlers
+logger.addHandler(file_handler)
+logger.addHandler(console_handler)
+
+
+class RAGSystem:
+    """
+    Système RAG qui combine recherche vectorielle et génération de texte.
+    """
+    
+    def __init__(self, config_path: Optional[str] = None):
+        """
+        Initialise le système RAG avec la configuration fournie.
+        
+        Args:
+            config_path: Chemin vers le fichier de configuration YAML
+        """
+        logger.info("Initialisation du système RAG...")
+        
+        # Chargement de la configuration
+        if config_path is None:
+            config_path = os.path.join("config", "config_rag.yaml")
+        
+        logger.info(f"Chargement de la configuration depuis : {config_path}")
+        
+        try:
+            with open(config_path, 'r') as f:
+                config_data = yaml.safe_load(f)
+                if not config_data or 'rag' not in config_data:
+                    error_msg = "Configuration 'rag' non trouvée dans le fichier de configuration"
+                    logger.error(error_msg)
+                    raise ValueError(error_msg)
+                self.config = config_data['rag']
+                
+                logger.debug("Configuration chargée : %s", json.dumps(self.config, indent=2, ensure_ascii=False))
+                
+                # Vérification des clés requises
+                required_keys = ['llm', 'retrieval', 'prompt']
+                for key in required_keys:
+                    if key not in self.config:
+                        error_msg = f"Section '{key}' manquante dans la configuration"
+                        logger.error(error_msg)
+                        raise KeyError(error_msg)
+                
+                # Vérification des clés requises pour llm
+                llm_required = ['model_name', 'temperature', 'max_length']
+                for key in llm_required:
+                    if key not in self.config['llm']:
+                        error_msg = f"Clé '{key}' manquante dans la section 'llm'"
+                        logger.error(error_msg)
+                        raise KeyError(error_msg)
+                
+                # Utilisation de model_name comme repo_id si repo_id n'est pas spécifié
+                if 'repo_id' not in self.config['llm']:
+                    self.config['llm']['repo_id'] = self.config['llm']['model_name']
+                    logger.debug("Utilisation de model_name comme repo_id: %s", self.config['llm']['repo_id'])
+        
+        except FileNotFoundError as e:
+            error_msg = f"Fichier de configuration non trouvé : {config_path}"
+            logger.error(error_msg)
+            raise FileNotFoundError(error_msg) from e
+            
+        except yaml.YAMLError as e:
+            error_msg = f"Erreur de syntaxe dans le fichier de configuration : {e}"
+            logger.error(error_msg)
+            raise ValueError(error_msg) from e
+        
+        # Initialisation du vector store
+        logger.info("Initialisation du vector store...")
+        self.vector_store = VectorStoreManager(
+            persist_directory=self.config['retrieval'].get('persist_directory', 'chroma_db'),
+            collection_name=self.config['retrieval'].get('collection_name', 'documents'),
+            embedding_model=self.config['retrieval'].get('embedding_model', 'sentence-transformers/all-mpnet-base-v2'),
+            device=self.config['retrieval'].get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
+        )
+        
+        # Initialisation du processeur de documents
+        self.document_processor = DocumentProcessor(
+            chunk_size=self.config['retrieval'].get('chunk_size', 1000),
+            chunk_overlap=self.config['retrieval'].get('chunk_overlap', 200)
+        )
+        
+        # Initialisation du modèle LLM
+        logger.info("Initialisation du modèle LLM...")
+        logger.debug("Configuration du modèle: %s", self.config['llm'])
+        
+        # Initialisation des composants du modèle
+        self.tokenizer = None
+        self.model = None
+        self.pipeline = None
+        
+        try:
+            self._initialize_llm_components()
+            logger.info("Modèle LLM initialisé avec succès: %s", self.config['llm']['repo_id'])
+            
+        except Exception as e:
+            error_msg = f"Erreur lors de l'initialisation du modèle HuggingFace : {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            raise RuntimeError(error_msg) from e
+        
+        # Initialisation du template de prompt
+        logger.debug("Chargement du template de prompt...")
+        self.prompt_template = PromptTemplate(
+            input_variables=["context", "question"],
+            template=self.config['prompt'].get('template', 
+                """Répondez à la question en vous basant sur le contexte fourni. Si vous ne connaissez pas la réponse, dites-le clairement.
+                
+                Contexte:
+                {context}
+                
+                Question: {question}
+                
+                Réponse:""")
+        )
+        
+        logger.info("Système RAG initialisé avec succès")
+    
+    def _initialize_llm_components(self):
+        """Initialise les composants du modèle de langage avec ctransformers."""
+        model_name = self.config['llm']['model_name']
+        model_path = self.config['llm'].get('model_path', 'models')
+        model_file = self.config['llm'].get('model_file')
+        model_type = self.config['llm'].get('model_type', 'mistral')
+        
+        # Configuration du modèle
+        config = {
+            'model': os.path.join(model_path, model_file) if model_file else None,
+            'model_type': model_type,
+            'model_name': model_name,
+            'context_length': int(self.config['llm'].get('context_length', 2048)),
+            'gpu_layers': int(self.config['llm'].get('gpu_layers', 50)),
+            'threads': os.cpu_count() // 2,
+            'batch_size': 8,
+            'max_new_tokens': int(self.config['llm'].get('max_new_tokens', 512)),
+            'temperature': float(self.config['llm'].get('temperature', 0.7)),
+            'top_p': float(self.config['llm'].get('top_p', 0.9)),
+            'top_k': int(self.config['llm'].get('top_k', 40)),
+            'repetition_penalty': float(self.config['llm'].get('repetition_penalty', 1.1)),
+            'last_n_tokens': 64,
+            'seed': 42,
+            'reset': True
+        }
+        
+        # Créer le répertoire du modèle s'il n'existe pas
+        os.makedirs(model_path, exist_ok=True)
+        
+        try:
+            # Vérifier si le modèle est déjà téléchargé localement
+            model_file_path = os.path.join(model_path, model_file) if model_file else None
+            
+            if model_file and os.path.exists(model_file_path):
+                logger.info(f"Chargement du modèle local depuis {model_file_path}")
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    model_path,
+                    model_file=model_file,
+                    **{k: v for k, v in config.items() if k not in ['model', 'model_name']}
+                )
+            else:
+                # Téléchargement du modèle depuis Hugging Face Hub
+                logger.info(f"Téléchargement du modèle {model_name} depuis Hugging Face Hub...")
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    model_name,
+                    **{k: v for k, v in config.items() if k not in ['model', 'model_name']}
+                )
+                
+                # Sauvegarder le modèle localement pour un chargement plus rapide la prochaine fois
+                if model_file:
+                    logger.info(f"Sauvegarde du modèle dans {model_file_path}")
+                    self.model.save_pretrained(model_path)
+            
+            logger.info("Modèle chargé avec succès")
+            
+        except Exception as e:
+            error_msg = f"Erreur lors du chargement du modèle: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            raise RuntimeError(error_msg) from e
+    
+    def _call_huggingface_api(self, prompt: str, **generation_kwargs) -> str:
+        """
+        Appelle le modèle pour générer une réponse à partir d'un prompt.
+        
+        Args:
+            prompt: Le prompt à envoyer au modèle
+            **generation_kwargs: Arguments supplémentaires pour la génération
+            
+        Returns:
+            La réponse générée par le modèle
+        """
+        try:
+            # Paramètres de génération par défaut
+            default_params = {
+                'max_new_tokens': int(self.config['llm'].get('max_new_tokens', 512)),
+                'temperature': float(self.config['llm'].get('temperature', 0.7)),
+                'top_p': float(self.config['llm'].get('top_p', 0.9)),
+                'top_k': int(self.config['llm'].get('top_k', 40)),
+                'repetition_penalty': float(self.config['llm'].get('repetition_penalty', 1.1)),
+                'seed': 42,
+                'reset': True
+            }
+            
+            # Fusion avec les paramètres fournis
+            generation_params = {**default_params, **generation_kwargs}
+            
+            # Génération de la réponse
+            response = self.model(
+                prompt,
+                **generation_params
+            )
+            
+            # Nettoyage de la réponse
+            response = response.strip()
+            
+            # Suppression du prompt de la réponse si nécessaire
+            if response.startswith(prompt):
+                response = response[len(prompt):].strip()
+                
+            # Nettoyage supplémentaire pour les modèles instruct
+            if response.startswith('[/INST]'):
+                response = response[7:].strip()
+            
+            return response
+            
+        except Exception as e:
+            error_msg = f"Erreur lors de l'appel au modèle: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            raise RuntimeError(error_msg) from e
+            
+    def _format_context(self, documents: List[Document]) -> str:
+        """
+        Formate les documents en une seule chaîne de contexte avec leurs métadonnées.
+        
+        Args:
+            documents: Liste de documents à formater
+            
+        Returns:
+            Chaîne formatée contenant le contexte
+        """
+        if not documents:
+            return "Aucun document pertinent trouvé pour répondre à la question."
+        
+        formatted_docs = []
+        
+        for i, doc in enumerate(documents, 1):
+            # Extraire les métadonnées pertinentes
+            metadata = doc.metadata
+            source = metadata.get('source', 'Source inconnue')
+            page = metadata.get('page', 'N/A')
+            score = metadata.get('score', 'N/A')
+            
+            # Formater les informations du document
+            doc_info = f"Document {i} (Source: {source}, Page: {page}, Score: {score}):\n"
+            
+            # Ajouter le contenu du document
+            content = doc.page_content.strip()
+            
+            # Construire la chaîne finale pour ce document
+            formatted_docs.append(f"{doc_info}{content}")
+        
+        # Joindre tous les documents avec des séparateurs clairs
+        return "\n\n" + "\n" + "-"*80 + "\n".join(formatted_docs) + "\n" + "-"*80 + "\n"
+
+    def answer_question(
+        self, 
+        question: str, 
+        top_k: Optional[int] = None,
+        **generation_kwargs
+    ) -> Dict[str, Any]:
+        """
+        Répond à une question en utilisant le système RAG.
+        
+        Args:
+            question: Question à poser
+            top_k: Nombre de documents à récupérer (optionnel, utilise la valeur par défaut si None)
+            **generation_kwargs: Arguments supplémentaires pour la génération du modèle
+            
+        Returns:
+            Dictionnaire contenant:
+            - answer: La réponse générée
+            - question: La question posée
+            - source_documents: Liste des documents sources
+
+        # Génération de la réponse
+        response = self.model(
+            prompt,
+            **generation_params
+        )
+
+        # Nettoyage de la réponse
+        response = response.strip()
+
+        # Suppression du prompt de la réponse si nécessaire
+        if response.startswith(prompt):
+            response = response[len(prompt):].strip()
+
+        # Nettoyage supplémentaire pour les modèles instruct
+        if response.startswith('[/INST]'):
+            response = response[7:].strip()
+
+        return response
+
+    except Exception as e:
+        error_msg = f"Erreur lors de l'appel au modèle: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        raise RuntimeError(error_msg) from e
+
+def _format_context(self, documents: List[Document]) -> str:
+    """
+    Formate les documents en une seule chaîne de contexte avec leurs métadonnées.
+
+    Args:
+        documents: Liste de documents à formater
+
+    Returns:
+        Chaîne formatée contenant le contexte
+    """
+    if not documents:
+        return "Aucun document pertinent trouvé pour répondre à la question."
+
+    formatted_docs = []
+
+    for i, doc in enumerate(documents, 1):
+        # Extraire les métadonnées pertinentes
+        metadata = doc.metadata
+        source = metadata.get('source', 'Source inconnue')
+        page = metadata.get('page', 'N/A')
+        score = metadata.get('score', 'N/A')
+
+        # Formater les informations du document
+        doc_info = f"Document {i} (Source: {source}, Page: {page}, Score: {score}):\n"
+
+        # Ajouter le contenu du document
+        content = doc.page_content.strip()
+
+        # Construire la chaîne finale pour ce document
+        formatted_docs.append(f"{doc_info}{content}")
+
+    # Joindre tous les documents avec des séparateurs clairs
+    return "\n\n" + "\n" + "-"*80 + "\n".join(formatted_docs) + "\n" + "-"*80 + "\n"
+
+def answer_question(
+    self, 
+    question: str, 
+    top_k: Optional[int] = None,
+    **generation_kwargs
+) -> Dict[str, Any]:
+    """
+    Répond à une question en utilisant le système RAG.
+
+    Args:
+        question: Question à poser
+        top_k: Nombre de documents à récupérer (optionnel, utilise la valeur par défaut si None)
+        **generation_kwargs: Arguments supplémentaires pour la génération du modèle
+
+    Returns:
+        Dictionnaire contenant:
+        - answer: La réponse générée
+        - question: La question posée
+        - source_documents: Liste des documents sources
+        - context_used: Le contexte utilisé pour générer la réponse
+        - metadata: Métadonnées supplémentaires
+    """
+    logger.info(f"Traitement de la question : {question}")
+
+    # Initialiser la liste des documents sources
+    source_docs = []
+
+    try:
+        # Validation de la question
+        if not question or not question.strip():
+            raise ValueError("La question ne peut pas être vide")
+
+        # Récupération des documents pertinents
+        top_k = top_k or self.config['retrieval'].get('top_k', 2)
+        min_score = self.config['retrieval'].get('min_score', 0.3)
+
+        logger.info(f"Recherche des {top_k} documents les plus pertinents (score min: {min_score})...")
+
+        # Recherche des documents pertinents
+        retrieved_docs = self.vector_store.similarity_search(
+            query=question,
+            k=top_k,
+            score_threshold=min_score
+        )
+
+        logger.info(f"{len(retrieved_docs)} documents retenus après filtrage par score")
+
+        if not retrieved_docs:
+            logger.warning("Aucun document pertinent trouvé pour la question")
+            return {
+                "answer": "Désolé, je n'ai pas trouvé d'informations pertinentes pour répondre à votre question.",
+                "question": question,
+                "source_documents": [],
+                "context_used": "Aucun document pertinent trouvé.",
+                "metadata": {
+                    "retrieved_docs": 0,
+                    "warning": "Aucun document pertinent trouvé"
+                    "error": str(e),
+                    "retrieved_docs": 0
+                }
+            }

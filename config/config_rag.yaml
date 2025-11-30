@@ -1,0 +1,42 @@
+# Configuration du système RAG
+rag:
+  # Paramètres du modèle LLM
+  llm:
+    model_name: "TheBloke/Mistral-7B-Instruct-v0.1-GGUF"  # Modèle GGUF optimisé pour CPU/GPU
+    model_file: "mistral-7b-instruct-v0.1.Q2_K.gguf"      # Version plus légère du modèle
+    local_model: true
+    model_path: "models"  # Dossier où le modèle est stocké
+    model_type: "mistral"
+    temperature: 0.7
+    max_new_tokens: 512
+    max_length: 2048  # Longueur maximale du contexte
+    context_length: 2048  # Longueur du contexte en tokens
+    gpu_layers: 0  # Désactiver l'utilisation du GPU (0 pour CPU uniquement)
+    top_p: 0.9  # Paramètre de sampling nucleus
+    top_k: 40  # Nombre de tokens à considérer pour le top-k sampling
+    repetition_penalty: 1.1  # Pénalité de répétition
+    
+  # Paramètres de récupération
+  retrieval:
+    persist_directory: "chroma_db"
+    collection_name: "documents"
+    embedding_model: "sentence-transformers/all-mpnet-base-v2"
+    device: "cpu"  # Forcer l'utilisation du CPU
+    top_k: 2  # Nombre de documents à récupérer
+    min_score: 0.3  # Score minimum de similitude
+    max_context_length: 2000  # Longueur maximale du contexte en tokens
+    chunk_size: 1000  # Taille des chunks pour le découpage des documents
+    chunk_overlap: 200  # Chevauchement entre les chunks
+    
+  # Paramètres du prompt
+  prompt:
+    system_prompt: "Tu es un assistant juridique spécialisé en droit marocain. Réponds de manière précise et concise en te basant uniquement sur le contexte fourni. Si la réponse ne se trouve pas dans le contexte, dis simplement que tu ne sais pas."
+    template: |
+      <s>[INST] {system_prompt}
+      
+      Contexte:
+      {context}
+      
+      Question: {question}
+      
+      Réponse: [/INST]

@@ -1,0 +1,20 @@
+# Configuration des données
+data:
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+
+# Configuration du modèle d'embedding
+embedding:
+  model_name: "sentence-transformers/all-mpnet-base-v2"
+  device: "cpu"  # 'cuda' pour utiliser le GPU si disponible
+
+# Configuration du stockage vectoriel
+vector_store:
+  persist_directory: "chroma_db"
+  collection_name: "documents"
+
+# Configuration du découpage des documents
+text_splitter:
+  chunk_size: 1000
+  chunk_overlap: 200
+  separators: ["\n\n", "\n", " ", ""]

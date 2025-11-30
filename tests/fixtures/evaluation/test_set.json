@@ -1,0 +1,84 @@
+[
+  {
+    "question": "Quelle est la durée de rétractation légale pour un contrat à distance ?",
+    "retrieved_docs": [
+      {
+        "id": "doc1",
+        "content": "Le délai de rétractation pour les contrats à distance est de 14 jours calendaires.",
+        "metadata": {
+          "source": "code_consommation_article_l221-18.md",
+          "page": 1
+        }
+      },
+      {
+        "id": "doc2",
+        "content": "Le consommateur dispose d'un délai de 14 jours pour se rétracter d'un contrat conclu à distance.",
+        "metadata": {
+          "source": "code_consommation_article_l221-18.md",
+          "page": 2
+        }
+      }
+    ],
+    "relevant_docs": [
+      {
+        "id": "doc1",
+        "content": "Le délai de rétractation pour les contrats à distance est de 14 jours calendaires.",
+        "metadata": {
+          "source": "code_consommation_article_l221-18.md",
+          "page": 1
+        }
+      },
+      {
+        "id": "doc3",
+        "content": "La période de rétractation de 14 jours commence à compter du jour de la conclusion du contrat.",
+        "metadata": {
+          "source": "code_consommation_article_l221-19.md",
+          "page": 1
+        }
+      }
+    ],
+    "generated_answer": "Le délai de rétractation pour un contrat à distance est de 14 jours calendaires.",
+    "reference_answer": "Le consommateur dispose d'un délai de rétractation de 14 jours calendaires pour un contrat conclu à distance.",
+    "metadata": {
+      "domain": "droit de la consommation",
+      "difficulty": "moyen"
+    }
+  },
+  {
+    "question": "Quels sont les documents à fournir pour une demande de prêt immobilier ?",
+    "retrieved_docs": [
+      {
+        "id": "doc4",
+        "content": "Pour une demande de prêt immobilier, les pièces justificatives suivantes sont généralement demandées : pièce d'identité, justificatif de domicile, bulletins de salaire, avis d'imposition.",
+        "metadata": {
+          "source": "guide_credit_immobilier.md",
+          "page": 5
+        }
+      },
+      {
+        "id": "doc5",
+        "content": "Le contrat de réservation ou de promesse de vente est nécessaire pour finaliser un prêt immobilier.",
+        "metadata": {
+          "source": "guide_credit_immobilier.md",
+          "page": 7
+        }
+      }
+    ],
+    "relevant_docs": [
+      {
+        "id": "doc4",
+        "content": "Pour une demande de prêt immobilier, les pièces justificatives suivantes sont généralement demandées : pièce d'identité, justificatif de domicile, bulletins de salaire, avis d'imposition.",
+        "metadata": {
+          "source": "guide_credit_immobilier.md",
+          "page": 5
+        }
+      }
+    ],
+    "generated_answer": "Pour une demande de prêt immobilier, il faut généralement fournir : pièce d'identité, justificatif de domicile, bulletins de salaire et avis d'imposition.",
+    "reference_answer": "Les documents nécessaires pour une demande de prêt immobilier incluent : pièce d'identité, justificatif de domicile, bulletins de salaire et avis d'imposition.",
+    "metadata": {
+      "domain": "banque et finance",
+      "difficulty": "facile"
+    }
+  }
+]
