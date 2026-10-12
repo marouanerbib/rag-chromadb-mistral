@@ -7,17 +7,12 @@ des réponses basées sur des documents.
 import os
 import json
 import yaml
-import torch
-from typing import Optional, List, Dict, Any, Union
-from pathlib import Path
+from typing import Optional, List, Dict, Any
 import logging
-from logging.handlers import RotatingFileHandler
-from ctransformers import AutoModelForCausalLM, AutoConfig
 
 from langchain_core.documents import Document
 from langchain_core.prompts import PromptTemplate
 
-from .document_indexer import DocumentIndexer
 from .vector_store import VectorStoreManager
 from .document_processor import DocumentProcessor
 from .utils.logger import get_logger
@@ -94,7 +89,7 @@ class RAGSystem:
             persist_directory=self.config['retrieval'].get('persist_directory', 'chroma_db'),
             collection_name=self.config['retrieval'].get('collection_name', 'documents'),
             embedding_model=self.config['retrieval'].get('embedding_model', 'sentence-transformers/all-mpnet-base-v2'),
-            device=self.config['retrieval'].get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
+            device=self.config['retrieval'].get('device', 'cpu')
         )
         
         # Initialisation du processeur de documents
@@ -140,6 +135,8 @@ class RAGSystem:
     
     def _initialize_llm_components(self):
         """Initialise les composants du modèle de langage avec ctransformers."""
+        from ctransformers import AutoModelForCausalLM
+
         model_name = self.config['llm']['model_name']
         model_path = os.path.abspath(self.config['llm'].get('model_path', 'models'))
         model_file = self.config['llm'].get('model_file')

@@ -2,10 +2,7 @@
 Tests pour le processeur de documents.
 """
 import os
-import pytest
-from pathlib import Path
-from unittest.mock import patch, MagicMock, mock_open
-from typing import List, Dict, Any
+from unittest.mock import patch
 
 # Importer le processeur de documents
 from src.document_processor import DocumentProcessor

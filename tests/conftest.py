@@ -1,15 +1,10 @@
 """
 Configuration des tests et fixtures partagées.
 """
-import os
 import shutil
 import tempfile
 import pytest
 from pathlib import Path
-
-# Ajout du répertoire src au PYTHONPATH
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
 @pytest.fixture(scope="session")
 def test_data_dir():

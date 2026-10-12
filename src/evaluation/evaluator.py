@@ -4,7 +4,6 @@ Module d'évaluation pour le système RAG.
 from typing import List, Dict, Any, Optional
 import json
 from pathlib import Path
-from sklearn.metrics import precision_score, recall_score, f1_score
 import numpy as np
 
 class RAGEvaluator:

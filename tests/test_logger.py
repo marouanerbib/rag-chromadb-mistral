@@ -1,10 +1,8 @@
 """
 Tests pour le module logger.
 """
-import os
 import logging
-from pathlib import Path
-from utils.logger import get_logger
+from src.utils.logger import get_logger
 
 def test_logger_creation():
     """Teste la création d'un logger."""

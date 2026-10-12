@@ -2,14 +2,12 @@
 Tests pour le gestionnaire de base de données vectorielle.
 """
 import os
-import shutil
 import tempfile
 import pytest
 from pathlib import Path
 
-# Ajouter le répertoire parent au PYTHONPATH
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Ces tests téléchargent un modèle d'embedding depuis Hugging Face
+pytest.importorskip("sentence_transformers")
 
 from src.vector_store import VectorStoreManager
 
@@ -52,4 +50,3 @@ def test_vector_store_persistence():
         collections = vsm.vector_store._client.list_collections()
         assert any(c.name == "test_persistence" for c in collections)
 
-# Ajoutez d'autres tests pour les méthodes comme add_documents, similarity_search, etc.
