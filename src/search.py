@@ -1,9 +1,8 @@
 """
 Module pour la recherche sémantique dans les documents indexés.
 """
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any
 
-from langchain_core.documents import Document
 
 from .vector_store import VectorStoreManager
 

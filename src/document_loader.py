@@ -1,13 +1,12 @@
 """
 Module pour le chargement des documents depuis différents formats.
 """
-from typing import List, Union, Optional
+from typing import List, Union
 from pathlib import Path
 from langchain_community.document_loaders import (
     PyPDFLoader,
     TextLoader,
     UnstructuredMarkdownLoader,
-    DirectoryLoader,
     UnstructuredFileLoader
 )
 from langchain_core.documents import Document

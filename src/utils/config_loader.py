@@ -1,7 +1,6 @@
 """
 Module pour charger et gérer la configuration de l'application.
 """
-import os
 import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional, List

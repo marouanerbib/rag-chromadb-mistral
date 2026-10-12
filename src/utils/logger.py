@@ -2,11 +2,8 @@
 Module de configuration des logs pour l'application.
 """
 import logging
-import os
 import sys
 from pathlib import Path
-from logging.handlers import QueueHandler, QueueListener
-from multiprocessing import Queue
 
 # File pour stocker les logs
 LOG_FILE = "logs/rag_system.log"

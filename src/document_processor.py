@@ -1,6 +1,5 @@
-from typing import List, Dict, Any
-from pathlib import Path
-from langchain_text_splitters import MarkdownTextSplitter, RecursiveCharacterTextSplitter
+from typing import List
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_core.documents import Document
 import logging
