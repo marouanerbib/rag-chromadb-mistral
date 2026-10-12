@@ -1,133 +1,102 @@
-# Système RAG (Retrieval-Augmented Generation)
+# Système RAG : ChromaDB + Mistral 7B en local
 
-Un système de génération de réponses basé sur la récupération d'informations, conçu pour fournir des réponses précises à partir d'un corpus de documents.
+Pipeline RAG (Retrieval-Augmented Generation) qui indexe des documents PDF ou TXT, retrouve les passages pertinents par recherche sémantique et génère une réponse avec un LLM exécuté en local sur CPU, en citant ses sources.
 
-## 🚀 Fonctionnalités
-
-- **Indexation de documents** : Prétraitement et stockage efficace des documents
-- **Recherche contextuelle** : Récupération précise des documents pertinents
-- **Génération de réponses** : Production de réponses naturelles basées sur le contexte
-- **Évaluation intégrée** : Mesure des performances avec des métriques standardisées
-
-## � Configuration du Modèle
-
-### Téléchargement du Modèle Mistral
-
-Ce projet utilise le modèle Mistral 7B. Suivez ces étapes pour le configurer :
-
-1. **Télécharger le modèle** :
-   - [Télécharger Mistral 7B](https://huggingface.co/mistralai/Mistral-7B-v0.1)
-   - Cliquez sur "Files and versions" puis téléchargez tous les fichiers
-
-2. **Créer le dossier des modèles** :
-   ```bash
-   mkdir -p models/mistral-7b
-   ```
-
-3. **Placer les fichiers** :
-   - Extrayez les fichiers téléchargés dans `models/mistral-7b/`
-   - La structure doit ressembler à :
-     ```
-     models/
-     └── mistral-7b/
-         ├── config.json
-         ├── model.safetensors
-         ├── tokenizer.json
-         └── ...
-     ```
-
-4. **Vérifier la configuration** :
-   Assurez-vous que le fichier `config/config_rag.yaml` contient :
-   ```yaml
-   llm:
-     model_path: "./models/mistral-7b"
-   ```
-
-## �📦 Prérequis
-
-- Python 3.8+
-- pip (gestionnaire de paquets Python)
-- Un environnement virtuel Python (recommandé)
-
-## 🛠 Installation
-
-1. **Cloner le dépôt**
-   ```bash
-   git clone [https://github.com/Akiraaymane/RAG-Project.git]
-   cd RAG-Project
-   ```
-
-2. **Créer et activer un environnement virtuel**
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # Sur Windows: venv\Scripts\activate
-   ```
-
-3. **Installer les dépendances**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-## 🏗 Structure du Projet
+## Fonctionnement
 
 ```
-.
-├── config/                 # Fichiers de configuration
-│   ├── config_rag.yaml     # Configuration principale
-│   └── eval_config.yaml   # Configuration de l'évaluation
-├── data/                   # Dossier des données
-│   ├── raw/               # Documents bruts (PDF, TXT, etc.)
-│   └── evaluation/        # Données pour l'évaluation
-├── src/                   # Code source
-│   ├── evaluation/        # Module d'évaluation
-│   ├── models/            # Modèles et logique métier
-│   └── utils/             # Utilitaires et helpers
-└── tests/                 # Tests unitaires et d'intégration
+documents (PDF/TXT)
+   │  chargement : PyPDFLoader / TextLoader
+   ▼
+découpage en chunks (RecursiveCharacterTextSplitter, 1000 caractères, recouvrement 200)
+   │
+   ▼
+embeddings sentence-transformers/all-mpnet-base-v2  ──►  ChromaDB (persistant)
+                                                              │
+question ──► embedding ──► top-k par similarité, filtre score ≥ 0.3
+                                                              │
+                                                              ▼
+                              prompt [INST] contexte + question ──► Mistral 7B Instruct (GGUF, ctransformers)
+                                                              │
+                                                              ▼
+                                                  réponse + documents sources
 ```
 
-## 🚀 Utilisation
+## Stack
 
-### Indexation des documents
+Python, LangChain (core, community, text-splitters), ChromaDB, sentence-transformers, ctransformers (Mistral 7B Instruct GGUF), pytest.
+
+## Installation
+
 ```bash
-python cli.py index --input-dir data/raw/
+git clone https://github.com/marouanerbib/rag-chromadb-mistral.git
+cd rag-chromadb-mistral
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
 ```
 
-### Poser une question
-```bash
-python cli.py ask "Votre question ici"
-```
+Modèle : télécharger `mistral-7b-instruct-v0.1.Q2_K.gguf` depuis [TheBloke/Mistral-7B-Instruct-v0.1-GGUF](https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF) et le placer dans `models/`. Le chemin et le fichier se règlent dans `config/config_rag.yaml`. Avec `local_model: false`, le modèle est téléchargé automatiquement au premier lancement (environ 3 Go).
 
-### Évaluer le système
+Les fichiers Markdown passent par `UnstructuredMarkdownLoader` et nécessitent en plus `pip install unstructured`.
+
+## Utilisation
+
 ```bash
+# 1. Indexer un dossier de documents
+python cli.py index --input-dir data/raw
+
+# 2. Poser une question (réponse + sources avec page)
+python cli.py ask "Quel est le délai de rétractation pour un contrat à distance ?"
+
+# Recherche sémantique interactive, sans LLM
+python recherche.py
+
+# Évaluation sur un jeu annoté
 python cli.py evaluate --test-data tests/fixtures/evaluation/test_set.json
+
+# Tests
+python cli.py test
 ```
 
-## 📊 Métriques d'Évaluation
+## Configuration
 
-Le système fournit plusieurs métriques pour évaluer les performances :
+| Fichier | Rôle |
+|---|---|
+| `config/config.yaml` | indexation : dossier source, modèle d'embedding, collection Chroma, taille des chunks |
+| `config/config_rag.yaml` | question-réponse : paramètres du LLM, top-k, score minimal, prompt système |
+| `config/eval_config.yaml` | paramètres d'évaluation |
 
-- **Récupération** :
-  - Précision : Proportion de documents pertinents parmi ceux récupérés
-  - Rappel : Proportion de documents pertinents effectivement récupérés
-  - F1-score : Moyenne harmonique de la précision et du rappel
+Le prompt système par défaut cible un assistant juridique (droit marocain) ; il se change dans `config_rag.yaml`.
 
-- **Génération** :
-  - Exact Match : Pourcentage de réponses identiques à la référence
-  - Score BLEU : Évaluation de la qualité de la traduction
-  - Score ROUGE : Mesure de similarité avec la référence
+## Évaluation
 
-## 🤝 Contribution
+`src/evaluation/evaluator.py` calcule :
+- pour la recherche : précision, rappel et F1 entre documents récupérés et documents pertinents ;
+- pour la génération : précision, rappel et F1 sur les tokens par rapport à une réponse de référence, et exact match.
 
-1. Forkez le projet
-2. Créez votre branche (`git checkout -b feature/AmazingFeature`)
-3. Committez vos changements (`git commit -m 'Add some AmazingFeature'`)
-4. Poussez vers la branche (`git push origin feature/AmazingFeature`)
-5. Ouvrez une Pull Request
+Il évalue un fichier JSON qui contient déjà les documents récupérés et les réponses générées. Le jeu fourni dans `tests/fixtures` est un exemple de deux questions, pas un benchmark.
 
-## 📄 Licence
+## Structure
 
-Ce projet est sous licence MIT - voir le fichier `LICENSE` pour plus de détails.
+```
+cli.py                    point d'entrée : index, ask, evaluate, test
+recherche.py              recherche sémantique interactive
+config/                   fichiers YAML
+src/
+  document_loader.py      chargement des fichiers d'un dossier
+  document_processor.py   chargement + découpage d'une liste de fichiers
+  text_splitter.py        découpage en chunks
+  vector_store.py         embeddings et ChromaDB (ajout, recherche avec score)
+  document_indexer.py     orchestration de l'indexation
+  search.py               recherche et mise en forme des résultats
+  rag_system.py           recherche + prompt + génération
+  evaluation/evaluator.py métriques
+  utils/                  configuration et logs
+tests/                    pytest (le LLM et la base vectorielle sont simulés)
+```
 
-## 📞 Contact
+## Limites
 
-Pour toute question, veuillez ouvrir une issue sur le dépôt.
+- Le modèle quantifié Q2_K tient sur CPU mais dégrade la qualité des réponses ; un quantifié Q4 ou Q5 est un meilleur compromis si la mémoire le permet.
+- Le contexte envoyé au LLM est tronqué à 2000 caractères.
+- `tests/test_vector_store.py` télécharge un modèle d'embedding et nécessite un accès à Hugging Face.
