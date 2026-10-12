@@ -5,8 +5,6 @@ Interface en ligne de commande pour le système RAG.
 import argparse
 import sys
 import subprocess
-import yaml
-from pathlib import Path
 from src.document_indexer import DocumentIndexer
 from src.rag_system import RAGSystem
 from src.utils.logger import get_logger
@@ -39,7 +37,7 @@ def parse_arguments():
     index_parser.add_argument(
         "--config",
         type=str,
-        default="config/config_rag.yaml",
+        default="config/config.yaml",
         help="Chemin vers le fichier de configuration"
     )
     
@@ -112,7 +110,7 @@ def run_tests(args):
     
     try:
         subprocess.run(cmd, check=True)
-    except subprocess.CalledProcessError as e:
+    except subprocess.CalledProcessError:
         logger.error("Certains tests ont échoué")
         sys.exit(1)
 
@@ -121,7 +119,7 @@ def index_documents(args):
     try:
         logger.info(f"Indexation des documents dans {args.input_dir}")
         indexer = DocumentIndexer(config_path=args.config)
-        indexer.index_directory(args.input_dir, force_recreate=args.force_recreate)
+        indexer.index_documents(directory=args.input_dir, force_recreate=args.force_recreate)
         logger.info("Indexation terminée avec succès")
     except Exception as e:
         logger.error(f"Erreur lors de l'indexation: {str(e)}")
@@ -143,11 +141,12 @@ def ask_question(args):
         print(f"RÉPONSE: {response['answer']}")
         print("="*80 + "\n")
         
-        if response.get('sources'):
+        if response.get('source_documents'):
             print("SOURCES :")
-            for i, source in enumerate(response['sources'], 1):
-                print(f"{i}. {source.get('source', 'N/A')} (Page {source.get('page', 'N/A')})")
-                print("   " + source.get('content', '')[:200] + "...\n")
+            for i, doc in enumerate(response['source_documents'], 1):
+                meta = doc.get('metadata', {})
+                print(f"{i}. {meta.get('source', 'N/A')} (Page {meta.get('page', 'N/A')})")
+                print("   " + doc.get('content', '')[:200] + "...\n")
                 
     except Exception as e:
         logger.error(f"Erreur lors du traitement de la question: {str(e)}")
@@ -234,9 +233,6 @@ def main():
     except Exception as e:
         logger.error(f"Erreur: {str(e)}", exc_info=True)
         sys.exit(1)
-    
-    else:
-        print("Commande non reconnue. Utilisez 'index' ou 'search'.")
 
 if __name__ == "__main__":
     main()

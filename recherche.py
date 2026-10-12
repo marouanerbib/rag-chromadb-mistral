@@ -9,7 +9,6 @@ Permet d'effectuer des recherches dans les documents indexés
 import os
 import sys
 from pathlib import Path
-from typing import List, Tuple, Optional, Dict, Any
 
 # Ajout du répertoire parent au path pour les imports
 sys.path.append(str(Path(__file__).parent))
@@ -58,7 +57,7 @@ def search_loop():
         VectorStoreManager()
     except Exception as e:
         print(f"Erreur lors de l'initialisation : {str(e)}")
-        print("Assurez-vous d'avoir d'abord indexé des documents avec 'python -m src.document_indexer'.")
+        print("Assurez-vous d'avoir d'abord indexé des documents avec 'python cli.py index --input-dir data/raw'.")
         return
     
     print("\nSystème de recherche prêt. Tapez /help pour l'aide.")
@@ -99,11 +98,6 @@ def search_loop():
             # Affichage des résultats formatés
             print(format_search_results(results))
             
-        except KeyboardInterrupt:
-            print("\nUtilisez la commande /quit pour quitter.")
-        except Exception as e:
-            print(f"\n❌ Erreur lors de la recherche : {str(e)}")
-                
         except KeyboardInterrupt:
             print("\nUtilisez la commande /quit pour quitter.")
         except Exception as e:

@@ -15,15 +15,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Importations locales
-try:
-    from document_processor import DocumentProcessor
-    from vector_store import VectorStoreManager
-    from utils.config_loader import ConfigLoader
-except ImportError:
-    # Si l'importation échoue, essayer avec des imports relatifs
-    from .document_processor import DocumentProcessor
-    from .vector_store import VectorStoreManager
-    from .utils.config_loader import ConfigLoader
+from .document_loader import DocumentLoader
+from .text_splitter import TextSplitter
+from .vector_store import VectorStoreManager
+from .utils.config_loader import ConfigLoader
 
 class DocumentIndexer:
     """
@@ -116,32 +111,7 @@ class DocumentIndexer:
             self.vector_store.add_documents(documents)
             
         return self.vector_store
-        
-        if force_recreate:
-            logger.info("Création d'un nouveau vector store...")
-            
-            # Suppression de l'ancien vector store s'il existe
-            if vector_store_path.exists():
-                import shutil
-                shutil.rmtree(vector_store_path)
-            
-            # Création du dossier parent si nécessaire
-            vector_store_path.parent.mkdir(parents=True, exist_ok=True)
-            
-            # Création d'un nouveau vector store
-            vector_store = Chroma.from_documents(
-                documents=documents,
-                embedding=self.embeddings,
-                persist_directory=str(vector_store_path),
-                collection_name=collection_name
-            )
-            
-            # Sauvegarde du vector store
-            vector_store.persist()
-            logger.info(f"Vector store créé avec succès dans {vector_store_path}")
-            
-            return vector_store
-    
+
     def index_documents(self, directory: Optional[Union[str, Path]] = None, 
                        force_recreate: bool = False):
         """
@@ -209,7 +179,7 @@ def main():
         if vector_store and vector_store.vector_store:
             # Récupérer le nombre de documents indexés
             count = len(vector_store.vector_store.get()['ids'])
-            print(f"\n✅ Indexation réussie !")
+            print("\n✅ Indexation réussie !")
             print(f"📄 Documents indexés : {count}")
             print(f"📁 Dossier du vector store : {vector_store.persist_directory}")
             print("\nVous pouvez maintenant lancer l'interface de recherche avec :")

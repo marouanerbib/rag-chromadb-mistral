@@ -1,7 +1,7 @@
 """
 Module pour la gestion du stockage vectoriel des documents.
 """
-from typing import List, Optional, Dict, Any
+from typing import List
 from pathlib import Path
 import shutil
 import logging
@@ -121,16 +121,12 @@ class VectorStoreManager:
                 query, k=k, **kwargs
             )
             
-            # Filtrer par seuil de score
-            filtered_docs = [
-                doc for doc, score in docs_and_scores 
-                if score >= score_threshold
-            ]
-            
-            # Ajouter le score aux métadonnées
-            for i, (doc, score) in enumerate(docs_and_scores):
-                if i < len(filtered_docs):
-                    filtered_docs[i].metadata['score'] = float(score)
+            # Filtrer par seuil de score et conserver le score dans les métadonnées
+            filtered_docs = []
+            for doc, score in docs_and_scores:
+                if score >= score_threshold:
+                    doc.metadata['score'] = float(score)
+                    filtered_docs.append(doc)
             
             return filtered_docs
         else:
